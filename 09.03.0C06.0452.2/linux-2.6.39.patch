@@ -1,0 +1,416 @@
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/MPP_hba.c linuxrdac-09.03.0C06.0452.2/MPP_hba.c
+--- linuxrdac-09.03.0C06.0452.2.orig/MPP_hba.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/MPP_hba.c	2011-10-27 00:31:41.134285979 +0200
+@@ -54,7 +54,7 @@
+ /***  CONSTANT DEFINITIONS  ***/
+ TEXT mpp_VendorId[9] = "        \0";
+ TEXT mpp_ProductId[17] = "                \0";
+-TEXT mpp_Version[16] = RAID_MANAGER_VERSION;
++TEXT mpp_Version[18] = RAID_MANAGER_VERSION"\0";
+ 
+ LWORD mpp_Debug = MPPCMN_DEFAULT_DEBUG_LEVEL;
+ LWORD mpp_NotReadyWaitTime = MPPCMN_DEFAULT_NOTREADYWAITTIME;
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_headers/MPP_Common.h linuxrdac-09.03.0C06.0452.2/mpp_linux_headers/MPP_Common.h
+--- linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_headers/MPP_Common.h	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mpp_linux_headers/MPP_Common.h	2011-10-27 00:31:41.144286568 +0200
+@@ -728,7 +728,7 @@
+ /***  GLOBALS  ***/
+ extern TEXT mpp_VendorId[9];
+ extern TEXT mpp_ProductId[17];
+-extern TEXT mpp_Version[16];
++extern TEXT mpp_Version[18];
+ 
+ extern LWORD mpp_Debug;
+ extern LWORD mpp_NotReadyWaitTime;
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/mppLnx26p_prototypes.h linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/mppLnx26p_prototypes.h
+--- linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/mppLnx26p_prototypes.h	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/mppLnx26p_prototypes.h	2011-10-27 00:31:41.144286568 +0200
+@@ -138,7 +138,7 @@
+ /* Function declarations for file operations */
+ static int mppLnx_open(struct inode *inode, struct file *file);
+ static int mppLnx_release(struct inode *inode, struct file *file);
+-static int mppLnx_ioctl(struct inode *inode, struct file *file, unsigned int cmd_in, unsigned long arg);
++static long mppLnx_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg);
+ 
+ /* Function to identify the disk type for a struct scsi_device */
+ static LWORD mppLnx_DeviceType(struct scsi_device*, LunPathInfo_t **lunPathInfo, RdacDeviceInformation_t **rdacinfo);
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/mppLnx26p_vhba.h linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/mppLnx26p_vhba.h
+--- linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/mppLnx26p_vhba.h	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/mppLnx26p_vhba.h	2011-10-27 00:31:41.144286568 +0200
+@@ -494,7 +494,7 @@
+ int mppLnx_proc_info(struct Scsi_Host *, char *, char **, off_t, int, int);
+ 
+ const char * mppLnx_info(struct Scsi_Host * shp);
+-int mppLnx_queuecommand(struct scsi_cmnd * scp, void (*done)(struct scsi_cmnd *));
++int mppLnx_queuecommand(struct Scsi_Host * shp, struct scsi_cmnd * scp);
+ int mppLnx_eh_device_reset_handler(struct scsi_cmnd * scp);
+ int mppLnx_eh_bus_reset_handler(struct scsi_cmnd * scp);
+ int mppLnx_eh_host_reset_handler(struct scsi_cmnd * scp);
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/MPP_Sysdep.h linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/MPP_Sysdep.h
+--- linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/MPP_Sysdep.h	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/MPP_Sysdep.h	2011-10-27 00:31:41.144286568 +0200
+@@ -46,7 +46,7 @@
+ 
+ /***  INCLUDES  ***/
+ #ifdef __KERNEL__
+-#include <linux/autoconf.h>
++#include <generated/autoconf.h>
+ #include <linux/module.h>
+ #include <linux/version.h>
+ #include <linux/kernel.h>
+@@ -62,7 +62,6 @@
+ #include <linux/genhd.h>
+ #include <linux/fs.h>
+ #include <linux/init.h>
+-#include <linux/smp_lock.h>
+ #include <linux/time.h>
+ #include <linux/proc_fs.h>
+ #include <linux/kdev_t.h>
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_upper.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_upper.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_upper.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_upper.c	2011-10-27 00:31:41.144286568 +0200
+@@ -62,7 +62,7 @@
+ #include <linux/list.h>
+ #include <linux/err.h>
+ #include <scsi/scsi_eh.h>
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)) && !(RHEL6_FLAG == 1)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)) && (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32))
+ #include <../drivers/base/base.h>
+ #endif
+ 
+@@ -132,7 +132,7 @@
+ 
+ MPP_MUTEX_T  mppLnx_rdac_mutex;
+ struct list_head mpp_hot_plug_list;
+-spinlock_t mpp_hot_plug_spin_lock = SPIN_LOCK_UNLOCKED;
++DEFINE_SPINLOCK(mpp_hot_plug_spin_lock);
+ 
+ /* MPP configuration parameter structure declaration */
+ struct mpp_Config_Parameters mppLnx_Config_Parameters;
+@@ -145,7 +145,7 @@
+     .read = NULL,
+     .write = NULL,
+     .open = mppLnx_open,
+-    .ioctl = mppLnx_ioctl,
++    .unlocked_ioctl = mppLnx_ioctl,
+     .release = mppLnx_release
+ };
+ 
+@@ -223,7 +223,7 @@
+         (MPPCMN_FEATURE_CALLBACK_FUNC)mppCmn_LunScanDelayFeatureCallback}
+ };
+ 
+-static spinlock_t unconfiguredDevice_lock = SPIN_LOCK_UNLOCKED;
++static DEFINE_SPINLOCK(unconfiguredDevice_lock);
+ static mppLnx_UnconfiguredDeviceList_t  unconfiguredDeviceList;
+ static int mppLnx_major;
+ 
+@@ -430,7 +430,7 @@
+     if(!mppCmn_AllowHBAsgDevs)
+     {
+ 
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) && (RHEL6_FLAG == 1) // To handle RHEL6 case
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) // To handle RHEL6 case
+         list_for_each_entry(class_intf, mpp_interface.node.next, node)
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27))
+         list_for_each_entry(class_intf, &mpp_interface.class->p->class_interfaces, node) // To handle SLES11 SP1 case
+@@ -506,7 +506,7 @@
+     {
+         /* restore function pointers */
+ 
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) && (RHEL6_FLAG == 1) // To handle RHEL6 case
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) // To handle RHEL6 case
+         list_for_each_entry(class_intf, mpp_interface.node.next, node)
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27))
+         list_for_each_entry(class_intf, &mpp_interface.class->p->class_interfaces, node) // To handle SLES11 SP1 case
+@@ -703,7 +703,7 @@
+     /* CR153801 */
+     if(!mppCmn_AllowHBAsgDevs)
+     {
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) && (RHEL6_FLAG == 1) // To handle RHEL6 case
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) // To handle RHEL6 case
+         list_for_each_entry(class_intf, mpp_interface.node.next, node)
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27))
+         list_for_each_entry(class_intf, &mpp_interface.class->p->class_interfaces, node) // To handle SLES11 SP1 case
+@@ -2381,7 +2381,7 @@
+ *
+ */
+ 
+-static int mppLnx_ioctl(struct inode *inode, struct file *file, unsigned int cmd_in, unsigned long arg)
++static long mppLnx_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
+ {
+     getRdacInfoIoctl_t UserArg;
+     mpp_utilGetStatusIoctl_t UtilArg;
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhba.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhba.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhba.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhba.c	2011-10-27 00:31:41.144286568 +0200
+@@ -64,7 +64,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+@@ -260,7 +259,6 @@
+ * completion function) and its time out function public. We must get them from a struct scsi_cmnd
+ * and save them for later use.
+ */
+-void (*middle_level_scsi_done)(struct scsi_cmnd *) = NULL;
+ void (*middle_level_timeoutfunc)(struct scsi_cmnd *) = NULL;
+ /***  PROCEDURES  ***/
+ static void mppLnx_set_command_timeout(struct scsi_host_template *pshtp);
+@@ -2646,7 +2644,7 @@
+             /* disable the clustering  for all the virtual luns already discovered by the virtual host */
+             shost_for_each_device(vSDp, vshp)
+             {
+-                clear_bit(QUEUE_FLAG_CLUSTER, &vSDp->request_queue->queue_flags);
++		vSDp->request_queue->limits.cluster = 0;
+             }
+         }
+     }
+@@ -2660,7 +2658,7 @@
+         /* change the table size for all the virtual luns already discovered by the virtual host */
+         shost_for_each_device(vSDp, vshp)
+         {
+-#if (RHEL6_FLAG == 1)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))
+             blk_queue_max_segments(vSDp->request_queue, vshp->sg_tablesize);
+ #else
+             blk_queue_max_hw_segments(vSDp->request_queue, vshp->sg_tablesize);
+@@ -2678,7 +2676,7 @@
+         /* change the max_sectors for all the virtual luns already discovered by the virtual host */
+         shost_for_each_device(vSDp, vshp)
+         {
+-#if (RHEL6_FLAG == 1)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))
+             blk_queue_max_hw_sectors(vSDp->request_queue, vshp->max_sectors);
+ #else
+             blk_queue_max_sectors(vSDp->request_queue, vshp->max_sectors);
+@@ -3165,7 +3163,7 @@
+     * DEBUG
+     * check virtual and physical device's request_queue_t attributes
+     */
+-#if (RHEL6_FLAG == 1)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))
+     MPP_DEBUGPRINT((MPP_INIT_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "virtual device bounce_pfn %ld bounce_gfp %d queue_flags %ld max_sectors %d logical_block_size %d max_segment_size %d seg_boundary_mask %ld dma_alignment %d\n",
+                     sdev->request_queue->limits.bounce_pfn,
+@@ -3799,7 +3797,7 @@
+     return -1;
+ }
+ 
+-int mppLnx_queuecommand(struct scsi_cmnd * vSCp, void (*done)(struct scsi_cmnd *))
++int mppLnx_queuecommand(struct Scsi_Host * shp, struct scsi_cmnd * vSCp)
+ {
+     int                  vchannel = vSCp->device->channel;
+     int                  targetId = vSCp->device->id;
+@@ -3828,7 +3826,6 @@
+                     vSCp->device->id,
+                     vSCp->device->lun));
+ 
+-    vSCp->scsi_done = done;
+     /*
+     * validate the command
+     */
+@@ -3939,20 +3936,6 @@
+         }
+     }
+ 
+-    if(unlikely(done == NULL))
+-    {
+-        MPP_ERRORLOGPRINT((MPP_ERR_FATAL, 903,
+-                           "mppLnx_queuecommand NULL done function target %d lun %d\n",
+-                           targetId,lun));
+-        return 0;
+-    }
+-    if(unlikely(middle_level_scsi_done == NULL))
+-    {
+-        /**
+-        * save the middle level scsi done function
+-        */
+-        middle_level_scsi_done = done;
+-    }
+     /*
+     * if debug driver, dump read/write cdb
+     */
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbaio.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbaio.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbaio.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbaio.c	2011-10-27 00:31:41.144286568 +0200
+@@ -69,7 +69,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+@@ -103,7 +102,6 @@
+ 
+ /***  TYPE DEFINITIONS  ***/
+ 
+-extern void (*middle_level_scsi_done)(struct scsi_cmnd *);
+ extern void (*middle_level_timeoutfunc)(struct scsi_cmnd *);
+ 
+ /*** EXTERNAL GLOBAL VARIABLES ***/
+@@ -645,7 +643,7 @@
+     *   gets unplugged, the request_fn defined for the queue is invoked and
+     *   transfers started.
+     **/
+-    generic_unplug_device(pSDp->request_queue);
++    blk_run_queue(pSDp->request_queue);
+ 
+ 
+     MPP_DEBUGPRINT((MPP_HBA_COMMAND_DEBUG+MPP_DEBUG_LEVEL_1,
+@@ -813,7 +811,7 @@
+     * unplug the device and let the request go
+     */
+ 
+-    generic_unplug_device(pSDp->request_queue);
++    blk_run_queue(pSDp->request_queue);
+ 
+     return 0;
+ }
+@@ -1187,7 +1185,7 @@
+         return (MPP_GOOD_STATUS);
+     }
+ 
+-    generic_unplug_device(pSDp->request_queue);
++    blk_run_queue(pSDp->request_queue);
+ 
+     MPP_DEBUGPRINT((MPP_PATH_VALIDATION_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "Exitng mppLnx_validatePath() for T%dL%dCtrl%dPath%d\n",
+@@ -2250,7 +2248,7 @@
+     *
+     */
+ 
+-    generic_unplug_device(pSDp->request_queue);
++    blk_run_queue(pSDp->request_queue);
+ 
+     MPP_DEBUGPRINT((MPP_FAILOVER_IO_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "Exitng mppLnx_IssueFailover() for T%dL%dCtrl%d\n",
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbalib.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbalib.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbalib.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbalib.c	2011-10-27 00:31:41.144286568 +0200
+@@ -62,7 +62,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+@@ -108,7 +107,7 @@
+ /*
+ *declare a spinlock for protecting the context of the mppLnxVHBAContext
+ */
+-static spinlock_t mppLnxVHBAContext_Lock = SPIN_LOCK_UNLOCKED;
++static DEFINE_SPINLOCK(mppLnxVHBAContext_Lock);
+ 
+ /* list for adding the ProxyRequest blocks */
+ //static mppLnx_ProxyRequestEntry_t     mppLnx_ProxyRequest_List;
+@@ -157,19 +156,19 @@
+ {
+ 
+     INIT_LIST_HEAD(&mppLnx_freeProxyRequestQ.list);
+-    mppLnx_freeProxyRequestQ.queueLock = SPIN_LOCK_UNLOCKED;
++    spin_lock_init(&mppLnx_freeProxyRequestQ.queueLock);
+     mppLnx_freeProxyRequestQ.queueType = MPPLNX_QUEUE_FREE_LIST;
+ 
+     INIT_LIST_HEAD(&mppLnx_s2tos3ProxyRequestQ.list);
+-    mppLnx_s2tos3ProxyRequestQ.queueLock = SPIN_LOCK_UNLOCKED;
++    spin_lock_init(&mppLnx_s2tos3ProxyRequestQ.queueLock);
+     mppLnx_s2tos3ProxyRequestQ.queueType = MPPLNX_QUEUE_S2TOS3_LIST;
+ 
+     INIT_LIST_HEAD(&mppLnx_pathvalidationProxyRequestQ.list);
+-    mppLnx_pathvalidationProxyRequestQ.queueLock = SPIN_LOCK_UNLOCKED;
++    spin_lock_init(&mppLnx_pathvalidationProxyRequestQ.queueLock);
+     mppLnx_pathvalidationProxyRequestQ.queueType = MPPLNX_QUEUE_PATHVALIDATION_LIST;
+ 
+     INIT_LIST_HEAD(&mppLnx_freeAsyncRequestQ.list);
+-    mppLnx_freeAsyncRequestQ.queueLock = SPIN_LOCK_UNLOCKED;
++    spin_lock_init(&mppLnx_freeAsyncRequestQ.queueLock);
+ 
+ }
+ /*******************************************************************************
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbamisc.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbamisc.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbamisc.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbamisc.c	2011-10-27 00:31:41.144286568 +0200
+@@ -61,7 +61,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbaproc.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbaproc.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbaproc.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbaproc.c	2011-10-27 00:31:41.144286568 +0200
+@@ -68,7 +68,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbatask.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbatask.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbatask.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbatask.c	2011-10-27 00:31:41.144286568 +0200
+@@ -72,7 +72,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+@@ -493,7 +492,6 @@
+     *  4. set a nice value
+     *
+     */
+-    lock_kernel();
+     daemonize(MPPLNX_PATHVALIDATE_PROC_NAME);
+     allow_signal(SIGHUP);
+     set_user_nice(current,-20);
+@@ -504,7 +502,6 @@
+     MPP_DEBUGPRINT((MPP_PATH_VALIDATION_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "mppLnx_pathvalidate_handler release the kernel\n"));
+ 
+-    unlock_kernel();
+ 
+     /*
+      * Wake up the thread that created us.
+@@ -746,7 +743,6 @@
+      *  4. set a nice value
+      *
+      */
+-    lock_kernel();
+     daemonize(MPPLNX_FAILBACK_PROC_NAME);
+     allow_signal(SIGHUP);
+     set_user_nice(current,-20);
+@@ -761,7 +757,6 @@
+     MPP_DEBUGPRINT((MPP_FAILOVERSCAN_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "mppLnx_failback_handler release the kernel\n"));
+ 
+-    unlock_kernel();
+ 
+     /*
+      * Wake up the thread that created us.
+@@ -969,7 +964,6 @@
+     */
+     MPP_DEBUGPRINT((MPP_RESERVE_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "mppLnx_worker_handler() lock the kernel\n"));
+-    lock_kernel();
+ 
+     daemonize(MPPLNX_SYNCIO_WORKER_PROC_NAME);
+     allow_signal(SIGHUP);
+@@ -978,7 +972,6 @@
+     MPP_DEBUGPRINT((MPP_RESERVE_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "mppLnx_worker_handler released the kernel\n"));
+ 
+-    unlock_kernel();
+ 
+     /*
+      * Wake up the thread that created us.

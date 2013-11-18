@@ -1,0 +1,139 @@
+diff -urN linuxrdac-09.03.0C05.0652/MPP_hba.c linuxrdac-09.03.0C05.0652-linux-3.4/MPP_hba.c
+--- linuxrdac-09.03.0C05.0652/MPP_hba.c	2013-01-08 12:52:48.000000000 +0100
++++ linuxrdac-09.03.0C05.0652-linux-3.4/MPP_hba.c	2013-11-15 18:57:53.137610977 +0100
+@@ -53,7 +53,7 @@
+ 
+ /***  CONSTANT DEFINITIONS  ***/
+ TEXT mpp_ProductId[17] = "                \0";
+-TEXT mpp_Version[16] = RAID_MANAGER_VERSION;
++TEXT mpp_Version[18] = RAID_MANAGER_VERSION"\0";
+ 
+ LWORD mpp_Debug = MPPCMN_DEFAULT_DEBUG_LEVEL;
+ LWORD mpp_NotReadyWaitTime = MPPCMN_DEFAULT_NOTREADYWAITTIME;
+diff -urN linuxrdac-09.03.0C05.0652/mpp_linux_headers/MPP_Common.h linuxrdac-09.03.0C05.0652-linux-3.4/mpp_linux_headers/MPP_Common.h
+--- linuxrdac-09.03.0C05.0652/mpp_linux_headers/MPP_Common.h	2013-01-08 12:52:49.000000000 +0100
++++ linuxrdac-09.03.0C05.0652-linux-3.4/mpp_linux_headers/MPP_Common.h	2013-11-15 18:57:53.140944343 +0100
+@@ -720,7 +720,7 @@
+ 
+ /***  GLOBALS  ***/
+ extern TEXT mpp_ProductId[17];
+-extern TEXT mpp_Version[16];
++extern TEXT mpp_Version[18];
+ 
+ extern LWORD mpp_Debug;
+ extern LWORD mpp_NotReadyWaitTime;
+diff -urN linuxrdac-09.03.0C05.0652/mpp_linux_sys_headers/MPP_Sysdep.h linuxrdac-09.03.0C05.0652-linux-3.4/mpp_linux_sys_headers/MPP_Sysdep.h
+--- linuxrdac-09.03.0C05.0652/mpp_linux_sys_headers/MPP_Sysdep.h	2013-01-08 12:52:49.000000000 +0100
++++ linuxrdac-09.03.0C05.0652-linux-3.4/mpp_linux_sys_headers/MPP_Sysdep.h	2013-11-15 18:57:53.154277805 +0100
+@@ -67,7 +67,9 @@
+ #include <linux/blkdev.h>
+ #include <linux/delay.h>
+ #include <asm/uaccess.h>
++#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0)
+ #include <asm/system.h>
++#endif
+ #include <asm/io.h>
+ #include <asm/param.h>
+ #include <scsi/scsi.h>
+diff -urN linuxrdac-09.03.0C05.0652/mppLnx26p_upper.c linuxrdac-09.03.0C05.0652-linux-3.4/mppLnx26p_upper.c
+--- linuxrdac-09.03.0C05.0652/mppLnx26p_upper.c	2013-01-08 12:52:48.000000000 +0100
++++ linuxrdac-09.03.0C05.0652-linux-3.4/mppLnx26p_upper.c	2013-11-15 18:57:53.140944343 +0100
+@@ -62,7 +62,7 @@
+ #include <linux/list.h>
+ #include <linux/err.h>
+ #include <scsi/scsi_eh.h>
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)) && !(RHEL6_FLAG == 1)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)) && (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32))
+ #include <../drivers/base/base.h>
+ #endif
+ 
+@@ -446,7 +446,7 @@
+     if(!mppCmn_AllowHBAsgDevs)
+     {
+ 
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) && (RHEL6_FLAG == 1) // To handle RHEL6 case
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) // To handle RHEL6 case
+         list_for_each_entry(class_intf, mpp_interface.node.next, node)
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27))
+         list_for_each_entry(class_intf, &mpp_interface.class->p->class_interfaces, node) // To handle SLES11 SP1 case
+@@ -522,7 +522,7 @@
+     {
+         /* restore function pointers */
+ 
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) && (RHEL6_FLAG == 1) // To handle RHEL6 case
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) // To handle RHEL6 case
+         list_for_each_entry(class_intf, mpp_interface.node.next, node)
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27))
+         list_for_each_entry(class_intf, &mpp_interface.class->p->class_interfaces, node) // To handle SLES11 SP1 case
+@@ -719,7 +719,7 @@
+     /* CR153801 */
+     if(!mppCmn_AllowHBAsgDevs)
+     {
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) && (RHEL6_FLAG == 1) // To handle RHEL6 case
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) // To handle RHEL6 case
+         list_for_each_entry(class_intf, mpp_interface.node.next, node)
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27))
+         list_for_each_entry(class_intf, &mpp_interface.class->p->class_interfaces, node) // To handle SLES11 SP1 case
+diff -urN linuxrdac-09.03.0C05.0652/mppLnx26p_vhbaio.c linuxrdac-09.03.0C05.0652-linux-3.4/mppLnx26p_vhbaio.c
+--- linuxrdac-09.03.0C05.0652/mppLnx26p_vhbaio.c	2013-01-08 12:52:48.000000000 +0100
++++ linuxrdac-09.03.0C05.0652-linux-3.4/mppLnx26p_vhbaio.c	2013-11-15 19:06:05.074543378 +0100
+@@ -1440,11 +1440,19 @@
+ 
+     if(likely(prequest->req))
+     {
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0))
++        if(likely(prequest->req->q->elevator->type))
++#else
+         if(likely(prequest->req->q->elevator->ops))
++#endif
+             blk_put_request(prequest->req);
+         else
+             MPP_DEBUGPRINT((MPP_PATH_VALIDATION_DEBUG+MPP_DEBUG_LEVEL_1,
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0))
++                            "__mppLnx_validatepath_done: prequest = 0x%p prequest->req->q->elevator->type is NULL\n", prequest));
++#else
+                             "__mppLnx_validatepath_done: prequest = 0x%p prequest->req->q->elevator->ops is NULL\n", prequest));
++#endif
+ 
+         prequest->req = NULL;
+     }
+@@ -2491,11 +2499,19 @@
+ 
+     if(likely(proxyRequest->req))
+     {
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0))
++        if(likely(proxyRequest->req->q->elevator->type))
++#else
+         if(likely(proxyRequest->req->q->elevator->ops))
++#endif
+             blk_put_request(proxyRequest->req);
+         else
+             MPP_DEBUGPRINT((MPP_FAILOVER_IO_DEBUG+MPP_DEBUG_LEVEL_3,
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0))
++                            "__mppLnx_failoverCmd_done: proxyRequest = 0x%p proxyRequest->req->q->elevator->type is NULL\n", proxyRequest));
++#else
+                             "__mppLnx_failoverCmd_done: proxyRequest = 0x%p proxyRequest->req->q->elevator->ops is NULL\n", proxyRequest));
++#endif
+ 
+         proxyRequest->req = NULL;
+     }
+@@ -2735,11 +2751,19 @@
+ 
+     if(likely(prequest->req))
+     {
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0))
++        if(likely(prequest->req->q->elevator->type))
++#else
+         if(likely(prequest->req->q->elevator->ops))
++#endif
+             blk_put_request(prequest->req);
+         else
+             MPP_DEBUGPRINT((MPP_HBA_COMMAND_DEBUG+MPP_DEBUG_LEVEL_1,
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0))
++                            "__mppLnx_scsi_done: prequest = 0x%p prequest->req->q->elevator->type is NULL\n", prequest));
++#else
+                             "__mppLnx_scsi_done: prequest = 0x%p prequest->req->q->elevator->ops is NULL\n", prequest));
++#endif
+ 
+         prequest->req = NULL;
+     }
